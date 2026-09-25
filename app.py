@@ -1,18 +1,77 @@
 import streamlit as st
-import onnxruntime as ort
 import numpy as np
+import json
 import pandas as pd
 
 
 # =========================================
-# Load ONNX Ocean AI Model
+# Load model weights
 # =========================================
 
-session = ort.InferenceSession(
-    "models/real_ocean_model.onnx"
-)
+with open(
+    "models/real_ocean_weights.json",
+    "r"
+) as f:
 
-input_name = session.get_inputs()[0].name
+    weights = json.load(f)
+
+
+def linear(x, weight, bias):
+
+    return np.maximum(
+        0,
+        x @ np.array(weight).T
+        + np.array(bias)
+    )
+
+
+def predict_temperature(
+    latitude,
+    longitude,
+    sst,
+    sss,
+    depth
+):
+
+    x = np.array(
+        [[
+            latitude,
+            longitude,
+            sst,
+            sss,
+            depth
+        ]],
+        dtype=np.float32
+    )
+
+    x = linear(
+        x,
+        weights["network.0.weight"],
+        weights["network.0.bias"]
+    )
+
+    x = linear(
+        x,
+        weights["network.2.weight"],
+        weights["network.2.bias"]
+    )
+
+    x = linear(
+        x,
+        weights["network.4.weight"],
+        weights["network.4.bias"]
+    )
+
+    x = (
+        x @ np.array(
+            weights["network.6.weight"]
+        ).T
+        + np.array(
+            weights["network.6.bias"]
+        )
+    )
+
+    return float(x[0][0])
 
 
 # =========================================
@@ -37,10 +96,6 @@ st.write(
 
 st.divider()
 
-
-# =========================================
-# Inputs
-# =========================================
 
 st.subheader(
     "🌍 Ocean Location and Surface Data"
@@ -85,10 +140,6 @@ st.info(
 st.divider()
 
 
-# =========================================
-# Prediction
-# =========================================
-
 if st.button(
     "🔮 Predict Ocean Temperature",
     type="primary"
@@ -102,26 +153,12 @@ if st.button(
         50
     ):
 
-        input_data = np.array(
-            [[
-                latitude,
-                longitude,
-                sst,
-                sss,
-                float(depth)
-            ]],
-            dtype=np.float32
-        )
-
-        prediction = session.run(
-            None,
-            {
-                input_name: input_data
-            }
-        )
-
-        temperature = float(
-            prediction[0][0][0]
+        temperature = predict_temperature(
+            latitude,
+            longitude,
+            sst,
+            sss,
+            depth
         )
 
         results.append(
@@ -131,10 +168,6 @@ if st.button(
             )
         )
 
-
-    # =====================================
-    # Results
-    # =====================================
 
     st.subheader(
         "🌊 Predicted Ocean Temperature"
