@@ -1,46 +1,29 @@
 import streamlit as st
-import torch
-import torch.nn as nn
+import onnxruntime as ort
+import numpy as np
 import pandas as pd
 
 
-class RealOceanModel(nn.Module):
+# =========================================
+# Load ONNX Ocean AI Model
+# =========================================
 
-    def __init__(self):
-        super().__init__()
-
-        self.network = nn.Sequential(
-            nn.Linear(5, 32),
-            nn.ReLU(),
-            nn.Linear(32, 32),
-            nn.ReLU(),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, 1)
-        )
-
-    def forward(self, x):
-        return self.network(x)
-
-
-model = RealOceanModel()
-
-model.load_state_dict(
-    torch.load(
-        "models/real_ocean_model.pth",
-        weights_only=True
-    )
+session = ort.InferenceSession(
+    "models/real_ocean_model.onnx"
 )
 
-model.eval()
+input_name = session.get_inputs()[0].name
 
+
+# =========================================
+# Streamlit page
+# =========================================
 
 st.set_page_config(
     page_title="Ocean Deep Temperature Predictor",
     page_icon="🌊",
     layout="wide"
 )
-
 
 st.title(
     "🌊 Ocean Deep Temperature Predictor"
@@ -53,6 +36,11 @@ st.write(
 )
 
 st.divider()
+
+
+# =========================================
+# Inputs
+# =========================================
 
 st.subheader(
     "🌍 Ocean Location and Surface Data"
@@ -88,12 +76,18 @@ with col2:
         value=35.2
     )
 
+
 st.info(
     f"📍 Location: "
     f"{latitude:.2f}°, {longitude:.2f}°"
 )
 
 st.divider()
+
+
+# =========================================
+# Prediction
+# =========================================
 
 if st.button(
     "🔮 Predict Ocean Temperature",
@@ -108,7 +102,7 @@ if st.button(
         50
     ):
 
-        input_data = torch.tensor(
+        input_data = np.array(
             [[
                 latitude,
                 longitude,
@@ -116,16 +110,19 @@ if st.button(
                 sss,
                 float(depth)
             ]],
-            dtype=torch.float32
+            dtype=np.float32
         )
 
-        with torch.no_grad():
+        prediction = session.run(
+            None,
+            {
+                input_name: input_data
+            }
+        )
 
-            prediction = model(
-                input_data
-            )
-
-        temperature = prediction.item()
+        temperature = float(
+            prediction[0][0][0]
+        )
 
         results.append(
             (
@@ -133,6 +130,11 @@ if st.button(
                 temperature
             )
         )
+
+
+    # =====================================
+    # Results
+    # =====================================
 
     st.subheader(
         "🌊 Predicted Ocean Temperature"
@@ -143,6 +145,7 @@ if st.button(
         "real-data trained model."
     )
 
+
     chart_data = pd.DataFrame(
         results,
         columns=[
@@ -151,11 +154,13 @@ if st.button(
         ]
     )
 
+
     st.line_chart(
         chart_data,
         x="Depth (m)",
         y="Temperature (°C)"
     )
+
 
     st.subheader(
         "📊 Depth Profile"
