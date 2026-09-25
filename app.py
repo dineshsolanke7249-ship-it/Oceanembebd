@@ -1,13 +1,8 @@
 import streamlit as st
 import torch
 import torch.nn as nn
-import geopandas as gpd
-from shapely.geometry import Point
+import pandas as pd
 
-
-# =========================================
-# Real Ocean AI Model
-# =========================================
 
 class RealOceanModel(nn.Module):
 
@@ -40,57 +35,6 @@ model.load_state_dict(
 model.eval()
 
 
-# =========================================
-# Marine boundaries
-# =========================================
-
-MARINE_FILE = (
-    "data/real/marine_boundaries/"
-    "ne_50m_geography_marine_polys.shp"
-)
-
-
-@st.cache_data
-def load_marine_boundaries():
-
-    return gpd.read_file(
-        MARINE_FILE
-    )
-
-
-marine_boundaries = load_marine_boundaries()
-
-
-def find_ocean_region(
-    latitude,
-    longitude
-):
-
-    point = Point(
-        longitude,
-        latitude
-    )
-
-    matches = marine_boundaries[
-        marine_boundaries.geometry.contains(
-            point
-        )
-    ]
-
-    if len(matches) == 0:
-
-        return (
-            "Open Ocean / "
-            "Region not identified"
-        )
-
-    return matches.iloc[0]["name_en"]
-
-
-# =========================================
-# Streamlit page
-# =========================================
-
 st.set_page_config(
     page_title="Ocean Deep Temperature Predictor",
     page_icon="🌊",
@@ -104,23 +48,17 @@ st.title(
 
 st.write(
     "Predict ocean temperature at different "
-    "depths using real satellite SST, "
-    "surface salinity and ocean location."
+    "depths using real satellite SST and "
+    "surface salinity."
 )
 
 st.divider()
-
-
-# =========================================
-# Inputs
-# =========================================
 
 st.subheader(
     "🌍 Ocean Location and Surface Data"
 )
 
 col1, col2 = st.columns(2)
-
 
 with col1:
 
@@ -138,7 +76,6 @@ with col1:
         value=70.0
     )
 
-
 with col2:
 
     sst = st.number_input(
@@ -151,28 +88,12 @@ with col2:
         value=35.2
     )
 
-
-# =========================================
-# Detect ocean region
-# =========================================
-
-ocean_region = find_ocean_region(
-    latitude,
-    longitude
-)
-
 st.info(
-    f"🌊 Detected Ocean / Sea Region: "
-    f"**{ocean_region}**"
+    f"📍 Location: "
+    f"{latitude:.2f}°, {longitude:.2f}°"
 )
-
 
 st.divider()
-
-
-# =========================================
-# Prediction
-# =========================================
 
 if st.button(
     "🔮 Predict Ocean Temperature",
@@ -180,7 +101,6 @@ if st.button(
 ):
 
     results = []
-
 
     for depth in range(
         50,
@@ -199,18 +119,13 @@ if st.button(
             dtype=torch.float32
         )
 
-
         with torch.no_grad():
 
             prediction = model(
                 input_data
             )
 
-
-        temperature = (
-            prediction.item()
-        )
-
+        temperature = prediction.item()
 
         results.append(
             (
@@ -218,11 +133,6 @@ if st.button(
                 temperature
             )
         )
-
-
-    # =====================================
-    # Display results
-    # =====================================
 
     st.subheader(
         "🌊 Predicted Ocean Temperature"
@@ -233,10 +143,26 @@ if st.button(
         "real-data trained model."
     )
 
+    chart_data = pd.DataFrame(
+        results,
+        columns=[
+            "Depth (m)",
+            "Temperature (°C)"
+        ]
+    )
 
-    for depth, temperature in results:
+    st.line_chart(
+        chart_data,
+        x="Depth (m)",
+        y="Temperature (°C)"
+    )
 
-        st.write(
-            f"**{depth} m → "
-            f"{temperature:.2f} °C**"
-        )
+    st.subheader(
+        "📊 Depth Profile"
+    )
+
+    st.dataframe(
+        chart_data,
+        use_container_width=True,
+        hide_index=True
+    )
